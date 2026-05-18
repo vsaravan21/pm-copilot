@@ -294,10 +294,14 @@ export function mockSpecWriterFromUserContent(userContent: string): SpecWriterAg
   );
 
   let focusedId: string | undefined;
+  let selectedOpportunityLabel: string | undefined;
   for (const line of userContent.split(/\r?\n/)) {
     if (line.startsWith("Focused opportunity id:")) {
       focusedId = line.slice("Focused opportunity id:".length).trim() || undefined;
-      break;
+    }
+    if (line.startsWith("Selected opportunity (user):")) {
+      selectedOpportunityLabel =
+        line.slice("Selected opportunity (user):".length).trim() || undefined;
     }
   }
 
@@ -307,6 +311,7 @@ export function mockSpecWriterFromUserContent(userContent: string): SpecWriterAg
 
   const title =
     selected?.title ??
+    (selectedOpportunityLabel ? selectedOpportunityLabel.slice(0, 120) : undefined) ??
     synthesis?.opportunityInsights?.[0]?.title ??
     "Discovery initiative";
 

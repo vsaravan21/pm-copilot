@@ -22,11 +22,7 @@ export async function runIntakeAgent(
 ): Promise<IntakeAgentOutput> {
   const llm = deps?.llm ?? createDefaultLLMClient();
 
-  const userContent = buildIntakeUserPrompt({
-    notes: payload.notes,
-    productName: payload.productName,
-    targetUser: payload.targetUser,
-  });
+  const userContent = buildIntakeUserPrompt(payload);
 
   const raw = await llm.complete({
     messages: [

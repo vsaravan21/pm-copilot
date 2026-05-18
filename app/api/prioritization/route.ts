@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { runPrioritizationAgent } from "@/lib/agents/prioritizationAgent";
-import {
-  coerceIntakeOutput,
-  coerceSynthesisOutput,
-  type PrioritizationAgentInput,
-} from "@/lib/schemas";
+import { parsePrioritizationAgentInput } from "@/lib/parseAgentHttpBody";
 
 export async function POST(request: Request) {
   let bodyJson: unknown;
@@ -18,52 +14,7 @@ export async function POST(request: Request) {
   const bodyObj = typeof bodyJson === "object" && bodyJson !== null ? bodyJson : {};
   const typed = bodyObj as Record<string, unknown>;
 
-  const rawInput =
-    typeof typed.rawInput === "string"
-      ? typed.rawInput.trim() || undefined
-      : undefined;
-
-  const productName =
-    typeof typed.productName === "string"
-      ? typed.productName.trim() || undefined
-      : undefined;
-
-  const targetUser =
-    typeof typed.targetUser === "string"
-      ? typed.targetUser.trim() || undefined
-      : undefined;
-
-  let intakeOutput: PrioritizationAgentInput["intakeOutput"];
-  if (typed.intakeOutput !== undefined && typed.intakeOutput !== null) {
-    try {
-      intakeOutput = coerceIntakeOutput(typed.intakeOutput);
-    } catch {
-      return NextResponse.json(
-        { error: "Field `intakeOutput` could not be parsed as Intake output" },
-        { status: 400 },
-      );
-    }
-  }
-
-  let synthesisOutput: PrioritizationAgentInput["synthesisOutput"];
-  if (typed.synthesisOutput !== undefined && typed.synthesisOutput !== null) {
-    try {
-      synthesisOutput = coerceSynthesisOutput(typed.synthesisOutput);
-    } catch {
-      return NextResponse.json(
-        { error: "Field `synthesisOutput` could not be parsed as Synthesis output" },
-        { status: 400 },
-      );
-    }
-  }
-
-  const payload: PrioritizationAgentInput = {
-    rawInput,
-    productName,
-    targetUser,
-    intakeOutput,
-    synthesisOutput,
-  };
+  const payload = parsePrioritizationAgentInput(typed);
 
   try {
     const result = await runPrioritizationAgent(payload);

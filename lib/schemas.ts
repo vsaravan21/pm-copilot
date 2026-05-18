@@ -40,23 +40,40 @@ export interface IntakeAgentOutput {
   sourceExcerptHint?: string;
 }
 
-export type IntakeRequestBody = {
-  notes: string;
-  productName?: string;
-  targetUser?: string;
-};
-
 /** Alias aligned with product docs (`IntakeOutput`). */
 export type IntakeOutput = IntakeAgentOutput;
 
-// —— Synthesis Agent ——
-
-export interface SynthesisAgentInput {
-  rawInput: string;
-  intakeOutput?: IntakeAgentOutput;
+/**
+ * Shared optional context for every agent. Agents read what they need and ignore
+ * irrelevant fields so the same POST shape works standalone and in pipeline mode.
+ */
+export type BaseAgentInput = {
+  rawInput?: string;
+  directInput?: string;
   productName?: string;
   targetUser?: string;
-}
+  intakeOutput?: IntakeOutput;
+  synthesisOutput?: SynthesisAgentOutput;
+  prioritizationOutput?: PrioritizationAgentOutput;
+  /** Rank id from Prioritization output, when known */
+  focusedOpportunityId?: string;
+  /** Freeform title, one-liner, or id hint for spec / prioritization focus */
+  selectedOpportunity?: string;
+};
+
+/** Intake accepts the same text fields as downstream agents, plus legacy `notes`. */
+export type IntakeAgentInput = BaseAgentInput & {
+  /**
+   * Legacy dashboard field — merged with `rawInput` / `directInput` via `resolveIntakePrimaryText`.
+   */
+  notes?: string;
+};
+
+export type IntakeRequestBody = IntakeAgentInput;
+
+// —— Synthesis Agent ——
+
+export type SynthesisAgentInput = BaseAgentInput;
 
 export interface EvidenceRef {
   /** Short verbatim or paraphrased anchor into raw material */
@@ -101,14 +118,7 @@ export interface SynthesisAgentOutput {
 
 // —— Prioritization Agent ——
 
-export interface PrioritizationAgentInput {
-  /** Verbatim context when upstream JSON is absent */
-  rawInput?: string;
-  intakeOutput?: IntakeAgentOutput;
-  synthesisOutput?: SynthesisAgentOutput;
-  productName?: string;
-  targetUser?: string;
-}
+export type PrioritizationAgentInput = BaseAgentInput;
 
 export interface ScoringDimensions {
   /** 1–5 normalized for mock; real models may calibrate */
@@ -142,16 +152,7 @@ export interface PrioritizationAgentOutput {
 
 // —— Spec Writer Agent ——
 
-export interface SpecWriterAgentInput {
-  rawInput?: string;
-  intakeOutput?: IntakeAgentOutput;
-  synthesisOutput?: SynthesisAgentOutput;
-  prioritizationOutput?: PrioritizationAgentOutput;
-  /** When sharpening a single opportunity from the rank stack */
-  focusedOpportunityId?: string;
-  productName?: string;
-  targetUser?: string;
-}
+export type SpecWriterAgentInput = BaseAgentInput;
 
 export interface UserStoryDraft {
   title: string;
@@ -171,6 +172,10 @@ export interface SpecWriterAgentOutput {
   nextSteps: string[];
   confidence: number;
 }
+
+/** Doc-aligned names for prior-step JSON. */
+export type SynthesisOutput = SynthesisAgentOutput;
+export type PrioritizationOutput = PrioritizationAgentOutput;
 
 export type SynthesisRequestBody = SynthesisAgentInput;
 export type PrioritizationRequestBody = PrioritizationAgentInput;

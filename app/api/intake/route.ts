@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { runIntakeAgent } from "@/lib/agents/intakeAgent";
-import type { IntakeRequestBody } from "@/lib/schemas";
+import { parseIntakeAgentInput } from "@/lib/parseAgentHttpBody";
 
 export async function POST(request: Request) {
   let bodyJson: unknown;
@@ -14,29 +14,7 @@ export async function POST(request: Request) {
   const bodyObj = typeof bodyJson === "object" && bodyJson !== null ? bodyJson : {};
   const typed = bodyObj as Record<string, unknown>;
 
-  const notes =
-    typeof typed.notes === "string"
-      ? typed.notes.trim()
-      : "";
-
-  if (!notes.length) {
-    return NextResponse.json(
-      { error: "Field `notes` is required and must be a non-empty string" },
-      { status: 400 },
-    );
-  }
-
-  const productName =
-    typeof typed.productName === "string"
-      ? typed.productName.trim() || undefined
-      : undefined;
-
-  const targetUser =
-    typeof typed.targetUser === "string"
-      ? typed.targetUser.trim() || undefined
-      : undefined;
-
-  const payload: IntakeRequestBody = { notes, productName, targetUser };
+  const payload = parseIntakeAgentInput(typed);
 
   try {
     const result = await runIntakeAgent(payload);
