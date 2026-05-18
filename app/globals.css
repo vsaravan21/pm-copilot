@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+:root {
+  --bg-main: #0b1020;
+  --bg-panel: #12172a;
+  --bg-card: rgba(26, 21, 46, 0.78);
+  --bg-card-hover: rgba(35, 28, 62, 0.9);
+
+  --text-primary: #f4f1ff;
+  --text-secondary: #b8b2d6;
+  --text-muted: #7f789f;
+
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-active: rgba(255, 121, 198, 0.45);
+
+  --accent-pink: #ff5c8a;
+  --accent-violet: #9b5cff;
+  --accent-blue: #3f8cff;
+
+  --success: #44d7b6;
+  --warning: #ffb86b;
+  --error: #ff6b6b;
+
+  /** Single refined product accent (not full-opacity neon) */
+  --gradient-accent: linear-gradient(
+    118deg,
+    rgba(255, 92, 138, 0.92) 0%,
+    rgba(155, 92, 255, 0.94) 52%,
+    rgba(63, 140, 255, 0.9) 100%
+  );
+  --gradient-accent-subtle: linear-gradient(
+    115deg,
+    rgba(255, 92, 138, 0.14) 0%,
+    rgba(155, 92, 255, 0.12) 50%,
+    rgba(63, 140, 255, 0.14) 100%
+  );
+  --gradient-sheen: radial-gradient(
+    ellipse 80% 55% at 50% -10%,
+    rgba(155, 92, 255, 0.22) 0%,
+    transparent 62%
+  );
+  --gradient-ambient-a: radial-gradient(
+    circle at 18% 22%,
+    rgba(155, 92, 255, 0.16) 0%,
+    transparent 52%
+  );
+  --gradient-ambient-b: radial-gradient(
+    circle at 88% 58%,
+    rgba(63, 140, 255, 0.14) 0%,
+    transparent 48%
+  );
+  --gradient-ambient-c: radial-gradient(
+    circle at 52% 92%,
+    rgba(255, 92, 138, 0.08) 0%,
+    transparent 45%
+  );
+}
+
+@theme inline {
+  --font-sans: var(--font-pm-sans);
+  --font-mono: var(--font-pm-mono);
+
+  --color-pm-bg: var(--bg-main);
+  --color-pm-panel: var(--bg-panel);
+  --color-pm-card: var(--bg-card);
+  --color-pm-card-hover: var(--bg-card-hover);
+  --color-pm-text: var(--text-primary);
+  --color-pm-subtle: var(--text-secondary);
+  --color-pm-muted: var(--text-muted);
+  --color-pm-border: var(--border-subtle);
+  --color-pm-border-active: var(--border-active);
+  --color-pm-pink: var(--accent-pink);
+  --color-pm-violet: var(--accent-violet);
+  --color-pm-blue: var(--accent-blue);
+  --color-pm-success: var(--success);
+  --color-pm-warning: var(--warning);
+  --color-pm-error: var(--error);
+}
+
+body {
+  min-height: 100%;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: var(--font-pm-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01" 1, "cv11" 1;
+}
+
+::selection {
+  background-color: rgba(155, 92, 255, 0.35);
+  color: var(--text-primary);
+}
