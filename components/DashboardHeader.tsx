@@ -24,7 +24,7 @@ export function DashboardHeader() {
 
       <div className="max-w-[42rem] space-y-4">
         <h1 className="text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.03em] text-pm-text sm:text-[2.75rem]">
-          Product decisions, powered by better inputs
+          Product decisions, powered by better insights
         </h1>
         <p className="max-w-[34rem] text-[16px] leading-[1.65] text-pm-subtle">
           PM Copilot helps product managers turn notes, research, and rough ideas into insights,
