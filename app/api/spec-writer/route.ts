@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { runSpecWriterAgent } from "@/lib/agents/specWriterAgent";
+import { agentErrorResponse } from "@/lib/api/agentRouteResponse";
 import { parseSpecWriterAgentInput } from "@/lib/parseAgentHttpBody";
 
 export async function POST(request: Request) {
@@ -20,8 +21,6 @@ export async function POST(request: Request) {
     const result = await runSpecWriterAgent(payload);
     return NextResponse.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Spec Writer Agent failed unexpectedly";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return agentErrorResponse(error, "Spec Writer Agent");
   }
 }

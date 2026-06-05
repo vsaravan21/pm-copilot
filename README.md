@@ -1,48 +1,69 @@
 # PM Copilot
 
-PM Copilot is a web-first, agentic assistant that helps PMs squeeze structure out of unstructured inputs — interviews, notes, brainstorms — before scaling into fuller synthesis or spec writing.
-
-This repo currently ships **Iteration 01**: a single lane that runs an **Intake Agent** backed by mock LLM semantics (no keys required).
+PM Copilot is a web-first, agentic assistant that helps PMs squeeze structure out of unstructured inputs — interviews, notes, brainstorms — through Intake, Synthesis, Prioritization, and Spec Writer agents.
 
 ## Getting started
 
 ```bash
 npm install
+cp .env.example .env.local   # optional: configure OpenAI
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## MVP surface area
+Check active LLM mode: `GET /api/health` → `{ "provider": "mock" | "openai", "model"?: "..." }`.
 
-| Area                                                                 | Details                                                    |
-| -------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `app/page.tsx`                                                       | Client orchestration connecting input + visualization      |
-| `app/api/intake/route.ts`                                            | POST `{ notes, productName?, targetUser? } → JSON intake` |
-| `lib/agents/intakeAgent.ts`                                          | Agent runner + parsing guardrails                         |
-| `lib/llm/llmClient.ts`                                               | Provider factory — extend with OpenAI / Workers AI        |
-| `lib/llm/mockLLMClient.ts`                                           | Deterministic heuristics with `LLMClient.complete` façade   |
+## LLM providers
 
-Future lanes (`synthesisAgent`, `prioritizationAgent`, `specWriterAgent`) are scaffolded placeholders under `lib/agents/`.
+| Variable | Meaning | Default |
+| -------- | ------- | ------- |
+| `LLM_PROVIDER` | `mock` (no key) or `openai` | `mock` |
+| `OPENAI_API_KEY` | Required when provider is `openai` | — |
+| `OPENAI_MODEL` | Chat model for all agents | `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | Optional OpenAI-compatible API base | `https://api.openai.com/v1` |
 
-### Environment
+**Mock mode (default)** — deterministic heuristics, no API key.
 
-| Variable         | Meaning                                       | Default    |
-| ---------------- | --------------------------------------------- | ---------- |
-| `LLM_PROVIDER`   | `'mock'` (built-in), future `openai`, etc. | `mock`     |
+**OpenAI mode** — add to `.env.local`:
 
-Selecting an unimplemented provider throws with guidance on wiring a real backend.
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+# OPENAI_MODEL=gpt-4o-mini
+```
 
-### Extending providers
+Restart `npm run dev` after changing env vars. Keys are server-only (never `NEXT_PUBLIC_*`).
 
-1. Implement `LLMClient` in `lib/llm/` (mirror `mockLLMClient.ts`).
-2. Register it inside `createDefaultLLMClient()`.
-3. Keep `runIntakeAgent()` unchanged — it relies only on `.complete(...)`.
+**Cost note:** `POST /api/pipeline` runs four sequential model calls. Prefer single-agent routes during development.
 
-Prompt text & JSON discipline live in `lib/prompts.ts` alongside shared schema typing in `lib/schemas.ts`.
+## API routes
 
-## Testing ideas
+| Route | Purpose |
+| ----- | ------- |
+| `POST /api/intake` | Intake Agent |
+| `POST /api/synthesis` | Synthesis Agent |
+| `POST /api/prioritization` | Prioritization Agent |
+| `POST /api/spec-writer` | Spec Writer Agent |
+| `POST /api/pipeline` | Full chain (Intake → Synthesis → Prioritization → Spec) |
+| `GET /api/health` | Provider label (no secrets) |
 
-1. Paste a multi-bullet interview excerpt — confirm classifications + grounded bullets.
-2. Provide optional product/target fields — observe missing-context questions narrowing.
-3. Flip `LLM_PROVIDER` to verify helpful errors until a real backend exists.
+Agents accept optional upstream JSON (`intakeOutput`, `synthesisOutput`, etc.) for pipeline mode, or standalone `rawInput` / `directInput` / `notes` alone.
+
+## Architecture
+
+| Area | Details |
+| ---- | ------- |
+| `lib/llm/llmClient.ts` | Provider factory (`mock` \| `openai`) |
+| `lib/llm/openaiLLMClient.ts` | OpenAI Chat Completions (fetch, JSON mode) |
+| `lib/llm/mockLLMClient.ts` | Deterministic mock |
+| `lib/agents/*` | Agent runners (unchanged contract: `llm.complete`) |
+| `lib/prompts.ts` | System prompts + user prompt builders |
+| `lib/schemas.ts` | Shared types + JSON coercers |
+
+## Testing
+
+1. With no env vars — Intake on dashboard uses mock.
+2. `LLM_PROVIDER=openai` without `OPENAI_API_KEY` — API returns a clear config error (400).
+3. Valid OpenAI key — `POST /api/intake` returns structured JSON.
+4. `POST /api/pipeline` with a short note — four real completions when OpenAI is enabled.

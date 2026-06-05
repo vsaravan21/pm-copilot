@@ -33,7 +33,7 @@ export async function runPrioritizationAgent(
       { role: "user", content: userContent },
     ],
     temperature: 0.2,
-    maxTokens: 2600,
+    maxTokens: 4000,
   });
 
   const parsed = parseAssistantJson(raw);

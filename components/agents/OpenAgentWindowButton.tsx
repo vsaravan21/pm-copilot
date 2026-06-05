@@ -3,6 +3,7 @@
 import type { DashboardAgentId } from "@/components/DashboardAgentCard";
 
 import { agentWindowPath } from "@/lib/agentRoutes";
+import { flushWorkspaceToStorage } from "@/lib/workspaceFlush";
 
 function ArrowUpRight({ className }: { className?: string }) {
   return (
@@ -34,14 +35,17 @@ type Props = {
  * Opens the dedicated agent workspace in a new browser tab/window (user agent controls tab vs window).
  */
 export function OpenAgentWindowButton({ agentId, className }: Props) {
-  const href = agentWindowPath(agentId);
+  const href = agentWindowPath(agentId, { handoff: true });
 
   return (
     <button
       type="button"
       aria-label="Open in new window"
-      onClick={() => window.open(href, "_blank", "noopener,noreferrer")}
-      className={`group inline-flex shrink-0 items-center justify-center rounded-lg border border-pm-border bg-pm-panel/80 p-1.5 text-pm-subtle transition hover:border-pm-border-active/45 hover:bg-pm-card-hover/80 hover:text-pm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pm-violet/30 ${className ?? ""}`}
+      onClick={() => {
+        flushWorkspaceToStorage();
+        window.open(href, "_blank", "noopener,noreferrer");
+      }}
+      className={`group inline-flex shrink-0 items-center justify-center rounded-lg border border-pm-border bg-pm-panel p-1.5 text-pm-subtle transition hover:border-pm-border-active/40 hover:bg-pm-card-hover hover:text-pm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pm-accent/30 ${className ?? ""}`}
     >
       <ArrowUpRight className="text-pm-muted opacity-85 transition group-hover:text-pm-subtle group-hover:opacity-100" />
     </button>

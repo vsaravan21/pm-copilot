@@ -33,7 +33,7 @@ export async function runSpecWriterAgent(
       { role: "user", content: userContent },
     ],
     temperature: 0.2,
-    maxTokens: 2800,
+    maxTokens: 4500,
   });
 
   const parsed = parseAssistantJson(raw);

@@ -1,37 +1,31 @@
 import { Fragment } from "react";
 
-const STEPS = [
-  "Messy Notes",
-  "Intake",
-  "Synthesis",
-  "Prioritization",
-  "PRD",
-] as const;
+const STEPS = ["Messy Notes", "Intake", "Synthesis", "Prioritization", "PRD"] as const;
 
-/** Orchestration timeline — restrained accent, not neon. */
+/** Orchestration chain — integrated into the hero. */
 export function PipelineStrip() {
   return (
     <nav
       aria-label="Workflow pipeline"
-      className="border border-pm-border bg-pm-panel/75 px-4 py-3.5 shadow-[0_12px_40px_-28px_rgba(0,0,0,0.55)] backdrop-blur-xl sm:px-5 rounded-[15px]"
+      className="flex flex-col gap-3 border-y border-pm-border py-4 sm:flex-row sm:items-center sm:justify-between"
     >
-      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2 sm:justify-start sm:gap-x-3">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
         {STEPS.map((label, index) => (
           <Fragment key={label}>
-            <span className="whitespace-nowrap rounded-lg border border-white/[0.06] bg-pm-bg/80 px-3 py-1.5 font-mono text-[11px] font-medium tracking-tight text-pm-subtle shadow-inner shadow-black/30">
+            <span className="whitespace-nowrap rounded-md border border-pm-border bg-pm-panel/80 px-2.5 py-1 font-mono text-[10.5px] font-medium tracking-tight text-pm-subtle">
               {label}
             </span>
             {index < STEPS.length - 1 ? (
-              <span className="text-pm-muted/60" aria-hidden>
+              <span className="text-[11px] text-pm-muted/50" aria-hidden>
                 →
               </span>
             ) : null}
           </Fragment>
         ))}
-        <span className="ml-auto hidden text-[10px] font-medium uppercase tracking-[0.2em] text-pm-muted lg:inline">
-          Orchestration chain
-        </span>
       </div>
+      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-pm-muted">
+        Orchestration chain
+      </p>
     </nav>
   );
 }

@@ -1,10 +1,17 @@
-import type { BaseAgentInput, IntakeAgentInput } from "@/lib/schemas";
+import type {
+  BaseAgentInput,
+  IntakeAgentInput,
+  PrioritizationAgentInput,
+  SpecWriterAgentInput,
+} from "@/lib/schemas";
 import {
   coerceIntakeOutput,
   coercePrioritizationOutput,
+  coerceSpecWriterOutput,
   coerceSynthesisOutput,
   type IntakeAgentOutput,
   type PrioritizationAgentOutput,
+  type SpecWriterAgentOutput,
   type SynthesisAgentOutput,
 } from "@/lib/schemas";
 
@@ -80,19 +87,44 @@ export function parseSynthesisAgentInput(typed: Record<string, unknown>): BaseAg
   };
 }
 
-export function parsePrioritizationAgentInput(typed: Record<string, unknown>): BaseAgentInput {
-  return {
-    ...baseFieldsFromUnknown(typed),
-    intakeOutput: optionalIntakeOutput(typed),
-    synthesisOutput: optionalSynthesisOutput(typed),
-  };
+function optionalRerankInstruction(typed: Record<string, unknown>): string | undefined {
+  return typeof typed.rerankInstruction === "string"
+    ? typed.rerankInstruction.trim() || undefined
+    : undefined;
 }
 
-export function parseSpecWriterAgentInput(typed: Record<string, unknown>): BaseAgentInput {
+function optionalRefinementInstruction(typed: Record<string, unknown>): string | undefined {
+  return typeof typed.refinementInstruction === "string"
+    ? typed.refinementInstruction.trim() || undefined
+    : undefined;
+}
+
+function optionalSpecWriterOutput(
+  typed: Record<string, unknown>,
+): SpecWriterAgentOutput | undefined {
+  if (typed.specWriterOutput === undefined || typed.specWriterOutput === null) return undefined;
+  return coerceSpecWriterOutput(typed.specWriterOutput);
+}
+
+export function parsePrioritizationAgentInput(
+  typed: Record<string, unknown>,
+): PrioritizationAgentInput {
   return {
     ...baseFieldsFromUnknown(typed),
     intakeOutput: optionalIntakeOutput(typed),
     synthesisOutput: optionalSynthesisOutput(typed),
     prioritizationOutput: optionalPrioritizationOutput(typed),
+    rerankInstruction: optionalRerankInstruction(typed),
+  };
+}
+
+export function parseSpecWriterAgentInput(typed: Record<string, unknown>): SpecWriterAgentInput {
+  return {
+    ...baseFieldsFromUnknown(typed),
+    intakeOutput: optionalIntakeOutput(typed),
+    synthesisOutput: optionalSynthesisOutput(typed),
+    prioritizationOutput: optionalPrioritizationOutput(typed),
+    specWriterOutput: optionalSpecWriterOutput(typed),
+    refinementInstruction: optionalRefinementInstruction(typed),
   };
 }

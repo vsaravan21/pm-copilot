@@ -1,4 +1,8 @@
 import {
+  computePriorityScore,
+  PRIORITIZATION_SCORING_MODEL_SUMMARY,
+} from "@/lib/prioritization/scoring";
+import {
   coerceIntakeOutput,
   coercePrioritizationOutput,
   coerceSpecWriterOutput,
@@ -6,7 +10,9 @@ import {
   type EvidenceRef,
   type IntakeAgentOutput,
   type PrioritizationAgentOutput,
-  type RankedOpportunity,
+  type PrioritizationInputType,
+  type PrioritizationScores,
+  type RankedPrioritizationItem,
   type SpecWriterAgentOutput,
   type SynthesisAgentOutput,
   type SynthesisTheme,
@@ -53,6 +59,176 @@ function tryParsePrioritizationJson(
   }
 }
 
+function tryParseSpecWriterJson(json: string | undefined): SpecWriterAgentOutput | undefined {
+  if (!json?.trim()) return undefined;
+  try {
+    return coerceSpecWriterOutput(JSON.parse(json));
+  } catch {
+    return undefined;
+  }
+}
+
+function clampScore(n: number): number {
+  return Math.min(5, Math.max(1, Math.round(n)));
+}
+
+function applyRerankLens(scores: PrioritizationScores, instruction: string): PrioritizationScores {
+  const i = instruction.toLowerCase();
+  const s = { ...scores };
+  if (/fastest mvp|mvp|lowest.*effort|ship fast/i.test(i)) {
+    s.implementationEffort = clampScore(s.implementationEffort - 1);
+    s.technicalComplexity = clampScore(s.technicalComplexity - 1);
+    s.strategicFit = clampScore(s.strategicFit + 1);
+  }
+  if (/user impact|student/i.test(i)) s.userImpact = clampScore(s.userImpact + 1);
+  if (/technical complexity|lowest.*complex/i.test(i)) {
+    s.technicalComplexity = clampScore(s.technicalComplexity - 1);
+  }
+  if (/evidence|strongest evidence/i.test(i)) {
+    s.evidenceStrength = clampScore(s.evidenceStrength + 1);
+    s.confidence = clampScore(s.confidence + 1);
+  }
+  if (/business value|org leader|leader value/i.test(i)) {
+    s.businessValue = clampScore(s.businessValue + 1);
+  }
+  if (/executive|roadmap pitch/i.test(i)) {
+    s.strategicFit = clampScore(s.strategicFit + 1);
+    s.businessValue = clampScore(s.businessValue + 1);
+  }
+  if (/penalize.*risk|risk more/i.test(i)) s.risk = clampScore(s.risk + 1);
+  return s;
+}
+
+function mockRerankPrioritization(
+  previous: PrioritizationAgentOutput,
+  instruction: string,
+): PrioritizationAgentOutput {
+  const oldTop = previous.rankedItems.find((r) => r.rank === 1);
+  const reranked = [...previous.rankedItems]
+    .map((item) => {
+      const scores = applyRerankLens(item.scores, instruction);
+      const priorityScore = computePriorityScore(scores);
+      return {
+        ...item,
+        scores,
+        priorityScore,
+        rationale: `Re-ranked under lens “${instruction.slice(0, 100)}”: priorityScore ${priorityScore} after adjusting criteria—not a new item set.`,
+        tradeoffs: [
+          item.tradeoffs[0] ?? "Tradeoffs shift when the decision lens changes.",
+          `Lens applied: ${instruction.slice(0, 90)}`,
+        ],
+        assumptions: [
+          item.assumptions[0] ?? "Prior evidence still directionally valid.",
+          `Temporarily weighting: ${instruction.slice(0, 80)}`,
+        ],
+      };
+    })
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+    .map((item, idx) => ({ ...item, rank: idx + 1 }));
+
+  const newTop = reranked[0];
+  const changeSummary =
+    oldTop && newTop && oldTop.id !== newTop.id
+      ? `“${newTop.title}” is now #1 (was #${oldTop.rank} for “${oldTop.title}”) after applying: ${instruction.slice(0, 120)}. Same items, re-weighted scores.`
+      : `Order updated under “${instruction.slice(0, 120)}” while keeping the same portfolio items; rationale and scores reflect the new lens.`;
+
+  return coercePrioritizationOutput({
+    ...previous,
+    rankedItems: reranked,
+    portfolioNarrative: `${previous.portfolioNarrative.slice(0, 240)} [Reranked: ${instruction.slice(0, 80)}]`,
+    recommendedNextStep: `Advance #1 (“${newTop?.title ?? "top item"}”) given the ${instruction.slice(0, 60)} lens; confirm tradeoffs with stakeholders.`,
+    changeSummary,
+    confidence: clamp01(Math.min(0.95, previous.confidence + 0.04)),
+  });
+}
+
+function mockRefineSpecWriter(
+  previous: SpecWriterAgentOutput,
+  instruction: string,
+): SpecWriterAgentOutput {
+  const i = instruction.toLowerCase();
+  const next: SpecWriterAgentOutput = { ...previous };
+  const notes: string[] = [];
+
+  if (/concise|shorter/i.test(i)) {
+    next.problemStatement = `${previous.problemStatement.slice(0, 320)}`.trim();
+    next.goals = previous.goals.slice(0, 3);
+    notes.push("tightened narrative length");
+  }
+  if (/mvp|narrow scope/i.test(i)) {
+    next.nonGoals = [
+      ...previous.nonGoals,
+      "Deferred: secondary personas, polish-heavy edge cases, and non-critical integrations.",
+    ];
+    next.userStories = previous.userStories.slice(0, 1);
+    notes.push("narrowed MVP scope");
+  }
+  if (/success metric|stronger metric/i.test(i)) {
+    next.successMetrics = [
+      ...previous.successMetrics,
+      "Leading indicator: weekly active users completing core job within 7 days (+15% vs baseline).",
+      "Guardrail: support tickets for this flow do not increase week-over-week.",
+    ];
+    notes.push("expanded success metrics");
+  }
+  if (/user stor/i.test(i)) {
+    next.userStories = [
+      ...previous.userStories,
+      {
+        title: "As a new user, I can complete onboarding with guided recovery",
+        description: "Covers happy path plus explicit failure recovery for the MVP cohort.",
+        acceptanceCriteria: [
+          "User sees progress indicator across steps",
+          "Abandonment triggers save-state and resume",
+        ],
+      },
+    ];
+    notes.push("added user stories");
+  }
+  if (/stakeholder|polished|executive/i.test(i)) {
+    next.proposedSolution = `${previous.proposedSolution} Executive summary: delivers measurable outcome for the target segment with clear rollout gates.`;
+    notes.push("more stakeholder-ready tone");
+  }
+  if (/technical requirement/i.test(i)) {
+    next.coreRequirements = [
+      ...previous.coreRequirements,
+      "API contracts documented with versioning and backward compatibility for v1 consumers.",
+      "P95 latency under 300ms for primary read path in production.",
+    ];
+    notes.push("added technical requirements");
+  }
+  if (/launch/i.test(i)) {
+    next.launchConsiderations = [
+      ...previous.launchConsiderations,
+      "Comms plan for internal champions before external GA.",
+    ];
+    notes.push("expanded launch considerations");
+  }
+  if (/risk/i.test(i)) {
+    next.risks = [
+      ...previous.risks,
+      "Adoption risk if training materials lag feature availability by more than one sprint.",
+    ];
+    notes.push("more specific risks");
+  }
+
+  const revisionSummary =
+    notes.length > 0
+      ? `Refined per “${instruction.slice(0, 100)}”: ${notes.join("; ")}.`
+      : `Refined per “${instruction.slice(0, 100)}”: light edits across sections while preserving structure.`;
+
+  next.sourceContext = [
+    ...previous.sourceContext,
+    `Refinement: ${instruction.slice(0, 120)}`,
+  ].slice(0, 10);
+
+  return coerceSpecWriterOutput({
+    ...next,
+    revisionSummary,
+    confidence: clamp01(Math.min(0.95, previous.confidence + 0.05)),
+  });
+}
+
 function splitSentences(text: string): string[] {
   const cleaned = text.replace(/\s+/g, " ").trim();
   if (!cleaned) return [];
@@ -67,39 +243,37 @@ function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
-function scoreFromLabel(
-  label: string,
-  index: number,
-): {
-  userImpact: number;
-  businessValue: number;
-  evidenceStrength: number;
-  implementationEffort: number;
-  technicalComplexity: number;
-} {
+function scoreFromLabel(label: string, index: number, hasEvidence: boolean): PrioritizationScores {
   const hash = (label.length + index * 7) % 5;
-  const userImpact = 2 + (hash % 3);
-  const businessValue = 2 + ((hash + 1) % 3);
-  const evidenceStrength = 2 + ((hash + 2) % 3);
-  const implementationEffort = 2 + ((5 - hash) % 3);
-  const technicalComplexity = 2 + ((hash + index) % 3);
   return {
-    userImpact,
-    businessValue,
-    evidenceStrength,
-    implementationEffort,
-    technicalComplexity,
+    userImpact: 2 + (hash % 3),
+    businessValue: 2 + ((hash + 1) % 3),
+    evidenceStrength: hasEvidence ? 3 + (hash % 2) : 2 + (hash % 2),
+    strategicFit: 2 + ((hash + 2) % 3),
+    confidence: hasEvidence ? 3 + (hash % 2) : 2,
+    implementationEffort: 2 + ((5 - hash) % 3),
+    technicalComplexity: 2 + ((hash + index) % 3),
+    risk: 2 + ((hash + index + 1) % 3),
   };
 }
 
-function compositeScore(s: ReturnType<typeof scoreFromLabel>): number {
-  return (
-    s.userImpact * 1.2 +
-    s.businessValue +
-    s.evidenceStrength -
-    s.implementationEffort * 0.9 -
-    s.technicalComplexity * 0.5
-  );
+function classifyMockInput(title: string, body: string): PrioritizationInputType {
+  const t = `${title} ${body}`.toLowerCase();
+  if (/\b(roadmap|q[1-4]|stakeholder|exec request|committed)\b/.test(t)) return "roadmapItem";
+  if (/\b(feature|capability|toggle|dashboard|export|notification)\b/.test(t)) return "feature";
+  if (/\b(build|implement|ship|solution|redesign|integration)\b/.test(t)) return "solution";
+  if (/\b(insight|pattern|theme|synthesis|converging)\b/.test(t)) return "insight";
+  if (/\b(pain|problem|friction|struggle|need|opportunity|bet)\b/.test(t)) return "opportunity";
+  return "unknown";
+}
+
+function splitCandidateLines(raw: string): string[] {
+  const lines = raw
+    .split(/\r?\n/)
+    .flatMap((line) => line.split(/(?<=[•\-*])\s+/))
+    .map((l) => l.replace(/^[\s•\-*\d.()[\]]+/, "").trim())
+    .filter((l) => l.length > 3);
+  return lines.length ? lines.slice(0, 12) : [];
 }
 
 /** Deterministic mock: theme/need extraction from raw + optional intake. */
@@ -203,89 +377,156 @@ export function mockSynthesisFromUserContent(userContent: string): SynthesisAgen
 }
 
 export function mockPrioritizationFromUserContent(userContent: string): PrioritizationAgentOutput {
+  const rerankInstruction = extractBlock(userContent, "RERANK_INSTRUCTION");
+  const previousPrior = tryParsePrioritizationJson(
+    extractBlock(userContent, "PRIORITIZATION_OUTPUT_JSON"),
+  );
+  if (rerankInstruction && previousPrior?.rankedItems?.length) {
+    return mockRerankPrioritization(previousPrior, rerankInstruction);
+  }
+
   const raw = extractBlock(userContent, "RAW_INPUT") ?? "";
   const intake = tryParseIntakeJson(extractBlock(userContent, "INTAKE_OUTPUT_JSON"));
   const synthesis = tryParseSynthesisJson(extractBlock(userContent, "SYNTHESIS_OUTPUT_JSON"));
 
-  type Item = { title: string; summary: string; evidenceHint?: string };
-  const items: Item[] = [];
+  type Candidate = {
+    title: string;
+    body: string;
+    inputType?: PrioritizationInputType;
+    evidenceHint?: string;
+  };
+  const candidates: Candidate[] = [];
 
   if (synthesis?.opportunityInsights?.length) {
     for (const o of synthesis.opportunityInsights) {
-      items.push({
+      candidates.push({
         title: o.title,
-        summary: o.insight,
+        body: o.insight,
+        inputType: "insight",
         evidenceHint: o.evidence[0]?.excerpt,
       });
     }
-  } else if (intake?.potentialOpportunities?.length) {
-    for (const t of intake.potentialOpportunities) {
-      items.push({ title: t.slice(0, 90), summary: t });
+  }
+  if (synthesis?.recurringPainThemes?.length) {
+    for (const pain of synthesis.recurringPainThemes.slice(0, 4)) {
+      candidates.push({ title: pain.slice(0, 90), body: pain, inputType: "opportunity" });
     }
-  } else if (raw.trim()) {
-    items.push({
-      title: "Validate highest-signal pain",
-      summary: raw.slice(0, 280),
-    });
-  } else {
-    items.push({
-      title: "Run discovery on open opportunities",
-      summary: "Upstream JSON was sparse—infer cautiously and gather more evidence before ranking.",
+  }
+  for (const line of splitCandidateLines(raw)) {
+    candidates.push({ title: line.slice(0, 100), body: line });
+  }
+  if (!candidates.length && intake?.potentialOpportunities?.length) {
+    for (const t of intake.potentialOpportunities) {
+      candidates.push({ title: t.slice(0, 90), body: t, inputType: "opportunity" });
+    }
+  }
+  if (!candidates.length && intake?.potentialPainPoints?.length) {
+    for (const t of intake.potentialPainPoints) {
+      candidates.push({ title: t.slice(0, 90), body: t, inputType: "opportunity" });
+    }
+  }
+  if (!candidates.length) {
+    candidates.push({
+      title: "Clarify priority candidates",
+      body:
+        raw.trim() ||
+        "Upstream JSON was sparse—infer cautiously and gather more evidence before ranking.",
+      inputType: "unknown",
     });
   }
 
-  const scored = items.map((item, i) => {
-    const scores = scoreFromLabel(item.title, i);
-    return { item, scores, composite: compositeScore(scores) };
+  const defaultTarget =
+    userContent.match(/Target user \(user\):\s*(.+)/)?.[1]?.trim() ||
+    intake?.productContext?.targetUserProvided ||
+    "Primary user segment (confirm with PM)";
+
+  const rankedDraft: RankedPrioritizationItem[] = candidates.slice(0, 10).map((c, i) => {
+    const inputType = c.inputType ?? classifyMockInput(c.title, c.body);
+    const hasEvidence = Boolean(c.evidenceHint);
+    const scores = scoreFromLabel(c.title, i, hasEvidence);
+    const priorityScore = computePriorityScore(scores);
+    const isSolutionLike =
+      inputType === "solution" || inputType === "feature" || inputType === "roadmapItem";
+    const underlyingProblem = isSolutionLike
+      ? `User need implied by “${c.title}”: ${c.body.slice(0, 160)}`
+      : c.body.slice(0, 280) || c.title;
+    const mappedOpportunity = isSolutionLike
+      ? synthesis?.opportunityInsights?.[0]?.title ??
+        intake?.potentialOpportunities?.[0] ??
+        "Broader product opportunity — validate with discovery"
+      : null;
+    const possibleSolutions =
+      inputType === "opportunity" || inputType === "unknown"
+        ? [
+            `Explore thin slice for: ${c.title.slice(0, 60)}`,
+            "Partner with design on journey map before build",
+          ]
+        : [];
+
+    return {
+      id: `item-${i + 1}`,
+      rank: i + 1,
+      priorityScore,
+      inputType,
+      title: c.title,
+      underlyingProblem,
+      targetUser: defaultTarget,
+      possibleSolutions,
+      mappedOpportunity,
+      scores,
+      rationale: `Rank driven by priorityScore ${priorityScore}: balances impact and evidence against effort, complexity, and risk${
+        c.evidenceHint ? ` (signal: “${c.evidenceHint.slice(0, 72)}…”)` : ""
+      }.`,
+      tradeoffs: [
+        "Higher-ranked items may need discovery before engineering commitment.",
+        "Lower-ranked items can jump if revenue or retention linkage is proven.",
+      ],
+      assumptions: [
+        "Input labels reflect real user or business pain, not solution bias alone.",
+        "Team capacity stays within a typical product cycle.",
+      ],
+      risks: [
+        "Mis-rank if severity/frequency quant data is missing.",
+        "Cross-team dependencies may not be captured in notes.",
+      ],
+      missingInformation: [
+        "Quantify affected users and frequency for this item.",
+        "Confirm strategic fit with current quarter goals.",
+      ],
+    };
   });
 
-  scored.sort((a, b) => b.composite - a.composite);
-
-  const rankedOpportunities = scored.map((row, i) => ({
-    id: `opp-${i + 1}`,
-    title: row.item.title,
-    summary: row.item.summary,
-    scores: row.scores,
-    compositeRank: i + 1,
-    rationale: `Rank ${i + 1}: balances perceived user impact with implementation load given current evidence${
-      row.item.evidenceHint ? ` (“${row.item.evidenceHint.slice(0, 80)}…”)` : ""
-    }.`,
-    tradeoffs: [
-      "Higher-ranked items may need discovery spend before build commitment.",
-      "Lower-ranked items could become P0 if segment or revenue linkage strengthens.",
-    ],
-    assumptions: [
-      "Evidence in notes is directionally correct but not statistically representative.",
-      "Team capacity and tech stack constraints stay within typical product cycle norms.",
-    ],
-    risks: [
-      "Mis-ranked item if missing quant data on severity or frequency.",
-      "Dependencies on other teams or platforms not captured in the notes.",
-    ],
-  }));
-
   const portfolioNarrative = synthesis?.executiveSummary?.trim().length
-    ? `Portfolio view driven by synthesis themes: ${synthesis.executiveSummary.slice(0, 360)}`
+    ? `Normalized ${rankedDraft.length} candidates from synthesis and notes. ${synthesis.executiveSummary.slice(0, 320)}`
     : intake?.productContext?.summary?.trim().length
-      ? `Priority stack grounded in intake context: ${intake.productContext.summary.slice(0, 280)}`
-      : "Ranked list reflects heuristic mock scoring until richer synthesis or metrics are attached.";
+      ? `Priority stack from intake and pasted inputs: ${intake.productContext.summary.slice(0, 260)}`
+      : `Normalized ${rankedDraft.length} mixed product inputs (opportunities, features, solutions, or notes) into a ranked portfolio.`;
 
   const decisionNotes = [
-    "Revisit rankings after attaching usage metrics or survey prevalence.",
-    "If two items tie on composite, prefer the one with clearer user-facing outcome.",
+    "Revisit rankings after usage metrics, survey prevalence, or synthesis refresh.",
+    "When inputType is unknown, run a short clarification interview before build.",
   ];
 
-  const conf = clamp01(0.55 + Math.min(0.35, rankedOpportunities.length * 0.04));
+  const conf = clamp01(0.55 + Math.min(0.35, rankedDraft.length * 0.04));
 
   return coercePrioritizationOutput({
     portfolioNarrative,
-    rankedOpportunities,
+    scoringModelSummary: PRIORITIZATION_SCORING_MODEL_SUMMARY,
+    rankedItems: rankedDraft,
     decisionNotes,
+    recommendedNextStep:
+      "Pilot the #1 ranked item with a measurable success metric and a two-week discovery checkpoint.",
     confidence: conf,
   });
 }
 
 export function mockSpecWriterFromUserContent(userContent: string): SpecWriterAgentOutput {
+  const refinementInstruction = extractBlock(userContent, "REFINEMENT_INSTRUCTION");
+  const previousPrd = tryParseSpecWriterJson(extractBlock(userContent, "SPEC_WRITER_OUTPUT_JSON"));
+  if (refinementInstruction && previousPrd?.prdTitle) {
+    return mockRefineSpecWriter(previousPrd, refinementInstruction);
+  }
+
   const raw = extractBlock(userContent, "RAW_INPUT") ?? "";
   const intake = tryParseIntakeJson(extractBlock(userContent, "INTAKE_OUTPUT_JSON"));
   const synthesis = tryParseSynthesisJson(extractBlock(userContent, "SYNTHESIS_OUTPUT_JSON"));
@@ -305,8 +546,8 @@ export function mockSpecWriterFromUserContent(userContent: string): SpecWriterAg
     }
   }
 
-  const ranked: RankedOpportunity[] = prioritization?.rankedOpportunities ?? [];
-  const selected: RankedOpportunity | undefined =
+  const ranked: RankedPrioritizationItem[] = prioritization?.rankedItems ?? [];
+  const selected: RankedPrioritizationItem | undefined =
     (focusedId ? ranked.find((r) => r.id === focusedId) : undefined) ?? ranked[0];
 
   const title =
@@ -316,7 +557,7 @@ export function mockSpecWriterFromUserContent(userContent: string): SpecWriterAg
     "Discovery initiative";
 
   const problem =
-    selected?.summary?.trim() ||
+    selected?.underlyingProblem?.trim() ||
     synthesis?.executiveSummary?.trim() ||
     intake?.productContext?.summary?.trim() ||
     (raw.trim() ? raw.slice(0, 400).trim() : "") ||
@@ -347,11 +588,31 @@ export function mockSpecWriterFromUserContent(userContent: string): SpecWriterAg
     userContent.match(/Product \(user\):\s*(.+)/)?.[1]?.trim() ??
     intake?.productContext?.productNameProvided ??
     "";
-  const documentTitle = pn ? `${pn} — ${title}` : `PRD draft — ${title}`;
+  const prdTitle = pn ? `${pn} — ${title}` : `PRD — ${title}`;
+  const targetUsers = [
+    selected?.targetUser?.trim() ||
+      userContent.match(/Target user \(user\):\s*(.+)/)?.[1]?.trim() ||
+      intake?.productContext?.targetUserProvided ||
+      "Primary user segment (confirm with PM)",
+  ].filter(Boolean) as string[];
+
+  const sourceContext: string[] = [];
+  if (selected) {
+    sourceContext.push(
+      `Prioritization #${selected.rank}: ${selected.title} (priorityScore ${selected.priorityScore})`,
+      selected.rationale,
+      ...selected.tradeoffs.slice(0, 2).map((t) => `Tradeoff: ${t}`),
+    );
+  }
+  if (synthesis?.executiveSummary) {
+    sourceContext.push(`Synthesis: ${synthesis.executiveSummary.slice(0, 200)}`);
+  }
+  if (raw.trim()) sourceContext.push(`User notes: ${raw.slice(0, 180)}`);
 
   return coerceSpecWriterOutput({
-    documentTitle,
+    prdTitle,
     problemStatement: problem,
+    targetUsers,
     goals: [
       "Deliver a clearly scoped slice that validates the core hypothesis.",
       "Improve primary success metric for the targeted user segment.",
@@ -360,23 +621,52 @@ export function mockSpecWriterFromUserContent(userContent: string): SpecWriterAg
       "Full platform rewrite or unbounded scope expansion in v1.",
       "Perfect coverage of edge personas before learning from primary segment.",
     ],
+    proposedSolution: selected
+      ? `Address “${selected.title}” by shipping a focused v1 that resolves: ${selected.underlyingProblem.slice(0, 200)}`
+      : raw.trim()
+        ? `Implement the concept described in user notes: ${raw.slice(0, 220)}`
+        : "Proposed solution to be refined with design and engineering after discovery.",
+    featureRecommendations: [
+      `Core flow for: ${title.slice(0, 80)}`,
+      "Instrumentation and admin visibility for rollout",
+      ...(selected?.possibleSolutions?.slice(0, 2) ?? []),
+    ],
     userStories,
+    coreRequirements: [
+      "End-to-end happy path for the primary persona",
+      "Explicit error and empty states with recovery guidance",
+      "Analytics events for funnel, success, and abandonment",
+      "Accessibility and responsive layout for primary surfaces",
+    ],
     successMetrics: [
       "Primary: activation or task success rate lifts vs baseline (define exact metric with data).",
       "Secondary: support volume or time-on-task reduction for the friction cluster.",
     ],
+    launchConsiderations: [
+      "Phased rollout with feature flag or cohort gating",
+      "Support and docs updated before GA",
+      "Rollback plan if primary metric regresses beyond agreed threshold",
+    ],
     risks: [
+      ...(selected?.risks?.slice(0, 2) ?? []),
       ...(synthesis?.crossCuttingRisks?.slice(0, 2) ?? []),
       "Scope creep if success metrics are not pinned before build.",
     ],
-    openQuestions: synthesis?.remainingUnknowns?.slice(0, 4) ??
-      intake?.missingContextQuestions?.slice(0, 4) ?? [
-        "What is the definition of “done” for the pilot cohort?",
-      ],
+    openQuestions:
+      selected?.missingInformation?.length
+        ? selected.missingInformation.slice(0, 4)
+        : synthesis?.remainingUnknowns?.slice(0, 4) ??
+          intake?.missingContextQuestions?.slice(0, 4) ?? [
+            "What is the definition of “done” for the pilot cohort?",
+          ],
     nextSteps: [
       "Confirm metrics and pilot cohort with PM + analytics.",
       "Ship thin experiment or MVP; review gates against success metrics.",
+      ...(prioritization?.recommendedNextStep
+        ? [prioritization.recommendedNextStep]
+        : []),
     ],
+    sourceContext: sourceContext.slice(0, 8),
     confidence: clamp01(0.52 + (ranked.length ? 0.12 : 0)),
   });
 }

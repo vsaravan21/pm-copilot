@@ -1,58 +1,61 @@
 @import "tailwindcss";
 
 :root {
-  --bg-main: #0b1020;
-  --bg-panel: #12172a;
-  --bg-card: rgba(26, 21, 46, 0.78);
-  --bg-card-hover: rgba(35, 28, 62, 0.9);
+  --bg-main: #09090b;
+  --bg-panel: #111113;
+  --bg-card: #18181b;
+  --bg-card-hover: #27272a;
 
-  --text-primary: #f4f1ff;
-  --text-secondary: #b8b2d6;
-  --text-muted: #7f789f;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
 
-  --border-subtle: rgba(255, 255, 255, 0.1);
-  --border-active: rgba(255, 121, 198, 0.45);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(56, 189, 248, 0.32);
 
-  --accent-pink: #ff5c8a;
-  --accent-violet: #9b5cff;
-  --accent-blue: #3f8cff;
+  --accent-cyan: #38bdf8;
+  --accent-lime: #a3e635;
+  --accent-blue: #60a5fa;
 
-  --success: #44d7b6;
-  --warning: #ffb86b;
-  --error: #ff6b6b;
+  /** Legacy token names — mapped to the new accent system */
+  --accent-pink: var(--accent-cyan);
+  --accent-violet: var(--accent-cyan);
 
-  /** Single refined product accent (not full-opacity neon) */
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+
   --gradient-accent: linear-gradient(
     118deg,
-    rgba(255, 92, 138, 0.92) 0%,
-    rgba(155, 92, 255, 0.94) 52%,
-    rgba(63, 140, 255, 0.9) 100%
+    rgba(56, 189, 248, 0.95) 0%,
+    rgba(96, 165, 250, 0.92) 55%,
+    rgba(163, 230, 53, 0.88) 100%
   );
   --gradient-accent-subtle: linear-gradient(
     115deg,
-    rgba(255, 92, 138, 0.14) 0%,
-    rgba(155, 92, 255, 0.12) 50%,
-    rgba(63, 140, 255, 0.14) 100%
+    rgba(56, 189, 248, 0.06) 0%,
+    rgba(96, 165, 250, 0.05) 50%,
+    rgba(163, 230, 53, 0.04) 100%
   );
   --gradient-sheen: radial-gradient(
-    ellipse 80% 55% at 50% -10%,
-    rgba(155, 92, 255, 0.22) 0%,
-    transparent 62%
+    ellipse 70% 45% at 50% -5%,
+    rgba(56, 189, 248, 0.08) 0%,
+    transparent 65%
   );
   --gradient-ambient-a: radial-gradient(
-    circle at 18% 22%,
-    rgba(155, 92, 255, 0.16) 0%,
-    transparent 52%
+    circle at 12% 18%,
+    rgba(56, 189, 248, 0.05) 0%,
+    transparent 50%
   );
   --gradient-ambient-b: radial-gradient(
-    circle at 88% 58%,
-    rgba(63, 140, 255, 0.14) 0%,
-    transparent 48%
+    circle at 92% 42%,
+    rgba(163, 230, 53, 0.04) 0%,
+    transparent 45%
   );
   --gradient-ambient-c: radial-gradient(
-    circle at 52% 92%,
-    rgba(255, 92, 138, 0.08) 0%,
-    transparent 45%
+    circle at 48% 100%,
+    rgba(96, 165, 250, 0.04) 0%,
+    transparent 42%
   );
 }
 
@@ -69,6 +72,8 @@
   --color-pm-muted: var(--text-muted);
   --color-pm-border: var(--border-subtle);
   --color-pm-border-active: var(--border-active);
+  --color-pm-accent: var(--accent-cyan);
+  --color-pm-accent-lime: var(--accent-lime);
   --color-pm-pink: var(--accent-pink);
   --color-pm-violet: var(--accent-violet);
   --color-pm-blue: var(--accent-blue);
@@ -86,6 +91,6 @@ body {
 }
 
 ::selection {
-  background-color: rgba(155, 92, 255, 0.35);
+  background-color: rgba(56, 189, 248, 0.28);
   color: var(--text-primary);
 }

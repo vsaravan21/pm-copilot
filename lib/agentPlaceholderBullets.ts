@@ -6,15 +6,15 @@ export const synthesisBullets = [
 ];
 
 export const prioritizationBullets = [
-  "Ranked opportunities with scoring deltas",
-  "Impact, value, evidence, effort & complexity rationale",
-  "Tradeoffs paired with stakeholder-ready notes",
-  "Assumption + risk ledger",
+  "Classified items (opportunity, feature, solution…)",
+  "Explicit priorityScore from dimension formula",
+  "Underlying problems & mapped opportunities",
+  "Per-item tradeoffs, risks & missing information",
 ];
 
 export const specBullets = [
-  "Structured PRD outline",
-  "User stories seeded with rationale",
-  "Success metrics suggestions",
-  "Risks, open questions & next-step checklist",
+  "Stakeholder-ready PRD sections",
+  "Copy PRD or download formatted PDF",
+  "User stories & core requirements",
+  "Metrics, launch plan, risks & next steps",
 ];

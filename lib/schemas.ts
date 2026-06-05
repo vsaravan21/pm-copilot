@@ -2,6 +2,11 @@
  * Shared types for pipeline agents. Extend as you add agents.
  */
 
+import {
+  computePriorityScore,
+  PRIORITIZATION_SCORING_MODEL_SUMMARY,
+} from "@/lib/prioritization/scoring";
+
 export type InputTypeClassification =
   | "user_interview"
   | "feedback"
@@ -118,41 +123,80 @@ export interface SynthesisAgentOutput {
 
 // —— Prioritization Agent ——
 
-export type PrioritizationAgentInput = BaseAgentInput;
+export type PrioritizationAgentInput = BaseAgentInput & {
+  /** Adjust decision lens and rerank the same item set */
+  rerankInstruction?: string;
+};
 
-export interface ScoringDimensions {
-  /** 1–5 normalized for mock; real models may calibrate */
+export type PrioritizationInputType =
+  | "opportunity"
+  | "solution"
+  | "feature"
+  | "roadmapItem"
+  | "insight"
+  | "unknown";
+
+/** Dimension scores (1–5). See `computePriorityScore` in lib/prioritization/scoring.ts. */
+export interface PrioritizationScores {
   userImpact: number;
   businessValue: number;
   evidenceStrength: number;
-  /** Higher means heavier lift */
+  strategicFit: number;
+  confidence: number;
   implementationEffort: number;
   technicalComplexity: number;
+  risk: number;
 }
 
-export interface RankedOpportunity {
+/** @deprecated Use PrioritizationScores */
+export type ScoringDimensions = PrioritizationScores;
+
+export interface RankedPrioritizationItem {
   id: string;
+  /** Final priority order; 1 is highest */
+  rank: number;
+  /** Calculated from scores — higher is higher priority */
+  priorityScore: number;
+  inputType: PrioritizationInputType;
   title: string;
-  summary: string;
-  scores: ScoringDimensions;
-  /** 1 = top */
-  compositeRank: number;
+  underlyingProblem: string;
+  targetUser: string;
+  /** When inputType is opportunity or problem-like */
+  possibleSolutions: string[];
+  /** When inputType is solution, feature, or roadmapItem */
+  mappedOpportunity: string | null;
+  scores: PrioritizationScores;
   rationale: string;
   tradeoffs: string[];
   assumptions: string[];
   risks: string[];
+  missingInformation: string[];
 }
+
+/** @deprecated Use RankedPrioritizationItem */
+export type RankedOpportunity = RankedPrioritizationItem;
 
 export interface PrioritizationAgentOutput {
   portfolioNarrative: string;
-  rankedOpportunities: RankedOpportunity[];
+  /** Explicit description of how priorityScore is calculated */
+  scoringModelSummary: string;
+  rankedItems: RankedPrioritizationItem[];
+  /** Portfolio-level missing information, open questions, and discovery gaps */
   decisionNotes: string[];
+  recommendedNextStep: string;
+  /** Set on rerank — what changed vs the previous ranking */
+  changeSummary?: string;
   confidence: number;
 }
 
 // —— Spec Writer Agent ——
 
-export type SpecWriterAgentInput = BaseAgentInput;
+export type SpecWriterAgentInput = BaseAgentInput & {
+  /** Refine the current PRD in place */
+  refinementInstruction?: string;
+  /** Previous PRD draft when refining */
+  specWriterOutput?: SpecWriterAgentOutput;
+};
 
 export interface UserStoryDraft {
   title: string;
@@ -161,15 +205,24 @@ export interface UserStoryDraft {
 }
 
 export interface SpecWriterAgentOutput {
-  documentTitle: string;
+  prdTitle: string;
   problemStatement: string;
+  targetUsers: string[];
   goals: string[];
   nonGoals: string[];
+  proposedSolution: string;
+  featureRecommendations: string[];
   userStories: UserStoryDraft[];
+  coreRequirements: string[];
   successMetrics: string[];
+  launchConsiderations: string[];
   risks: string[];
   openQuestions: string[];
   nextSteps: string[];
+  /** Evidence, prioritization rationale, or upstream context cited */
+  sourceContext: string[];
+  /** Set on refinement — what changed vs the previous PRD */
+  revisionSummary?: string;
   confidence: number;
 }
 
@@ -231,26 +284,48 @@ export function coerceSynthesisOutput(raw: unknown): SynthesisAgentOutput {
 
 export function coercePrioritizationOutput(raw: unknown): PrioritizationAgentOutput {
   const o = raw as Record<string, unknown>;
+  const notes = stringArray(o.decisionNotes);
+  const explicitNext = String(o.recommendedNextStep ?? "").trim();
+  const rankedRaw =
+    o.rankedItems !== undefined ? o.rankedItems : o.rankedOpportunities;
   return {
     portfolioNarrative: String(o.portfolioNarrative ?? "").trim(),
-    rankedOpportunities: rankedOppArray(o.rankedOpportunities),
-    decisionNotes: stringArray(o.decisionNotes),
+    scoringModelSummary:
+      String(o.scoringModelSummary ?? "").trim() ||
+      PRIORITIZATION_SCORING_MODEL_SUMMARY,
+    rankedItems: rankedItemArray(rankedRaw),
+    decisionNotes: notes,
+    recommendedNextStep:
+      explicitNext ||
+      "Validate the top-ranked item with metrics and a thin discovery slice.",
+    changeSummary: String(o.changeSummary ?? "").trim() || undefined,
     confidence: clamp01(Number(o.confidence)),
   };
 }
 
 export function coerceSpecWriterOutput(raw: unknown): SpecWriterAgentOutput {
   const o = raw as Record<string, unknown>;
+  const targetUsers = stringArray(o.targetUsers);
+  const legacyTarget = String(o.targetUser ?? "").trim();
+  if (!targetUsers.length && legacyTarget) targetUsers.push(legacyTarget);
+
   return {
-    documentTitle: String(o.documentTitle ?? "").trim(),
+    prdTitle: String(o.prdTitle ?? o.documentTitle ?? "Product requirements draft").trim(),
     problemStatement: String(o.problemStatement ?? "").trim(),
+    targetUsers,
     goals: stringArray(o.goals),
     nonGoals: stringArray(o.nonGoals),
+    proposedSolution: String(o.proposedSolution ?? "").trim(),
+    featureRecommendations: stringArray(o.featureRecommendations),
     userStories: userStoryArray(o.userStories),
+    coreRequirements: stringArray(o.coreRequirements),
     successMetrics: stringArray(o.successMetrics),
+    launchConsiderations: stringArray(o.launchConsiderations),
     risks: stringArray(o.risks),
     openQuestions: stringArray(o.openQuestions),
     nextSteps: stringArray(o.nextSteps),
+    sourceContext: stringArray(o.sourceContext),
+    revisionSummary: String(o.revisionSummary ?? "").trim() || undefined,
     confidence: clamp01(Number(o.confidence)),
   };
 }
@@ -321,7 +396,7 @@ function oppInsightArray(v: unknown): SynthesisOpportunityInsight[] {
   return out.slice(0, 12);
 }
 
-function scoreDim(o: unknown): ScoringDimensions {
+function scoreDim(o: unknown): PrioritizationScores {
   const x = (o ?? {}) as Record<string, unknown>;
   const n = (k: string, d: number) => {
     const v = Number(x[k]);
@@ -332,35 +407,81 @@ function scoreDim(o: unknown): ScoringDimensions {
     userImpact: n("userImpact", 3),
     businessValue: n("businessValue", 3),
     evidenceStrength: n("evidenceStrength", 3),
+    strategicFit: n("strategicFit", 3),
+    confidence: n("confidence", 3),
     implementationEffort: n("implementationEffort", 3),
     technicalComplexity: n("technicalComplexity", 3),
+    risk: n("risk", 3),
   };
 }
 
-function rankedOppArray(v: unknown): RankedOpportunity[] {
+function normalizePrioritizationInputType(v: unknown): PrioritizationInputType {
+  const allowed: PrioritizationInputType[] = [
+    "opportunity",
+    "solution",
+    "feature",
+    "roadmapItem",
+    "insight",
+    "unknown",
+  ];
+  const raw = String(v ?? "unknown").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  if (raw === "roadmapitem") return "roadmapItem";
+  const key = raw as PrioritizationInputType;
+  return allowed.includes(key) ? key : "unknown";
+}
+
+function rankedItemArray(v: unknown): RankedPrioritizationItem[] {
   if (!Array.isArray(v)) return [];
-  const out: RankedOpportunity[] = [];
+  const out: RankedPrioritizationItem[] = [];
   let i = 0;
   for (const item of v) {
     const x = item as Record<string, unknown>;
     const title = String(x.title ?? "").trim();
     if (!title) continue;
     i += 1;
-    out.push({
-      id: typeof x.id === "string" && x.id.trim() ? x.id.trim() : `opp-${i}`,
-      title,
-      summary: String(x.summary ?? "").trim(),
-      scores: scoreDim(x.scores),
-      compositeRank: Number.isFinite(Number(x.compositeRank))
+    const scores = scoreDim(x.scores);
+    const rank = Number.isFinite(Number(x.rank))
+      ? Math.max(1, Math.floor(Number(x.rank)))
+      : Number.isFinite(Number(x.compositeRank))
         ? Math.max(1, Math.floor(Number(x.compositeRank)))
-        : i,
+        : i;
+    const priorityScore = Number.isFinite(Number(x.priorityScore))
+      ? Math.min(100, Math.max(0, Math.round(Number(x.priorityScore))))
+      : computePriorityScore(scores);
+    const inputType = normalizePrioritizationInputType(x.inputType);
+    const underlyingProblem = String(
+      x.underlyingProblem ?? x.summary ?? "",
+    ).trim();
+    const mappedRaw = x.mappedOpportunity;
+    const mappedOpportunity =
+      mappedRaw === null
+        ? null
+        : typeof mappedRaw === "string" && mappedRaw.trim()
+          ? mappedRaw.trim()
+          : null;
+
+    out.push({
+      id: typeof x.id === "string" && x.id.trim() ? x.id.trim() : `item-${i}`,
+      rank,
+      priorityScore,
+      inputType,
+      title,
+      underlyingProblem: underlyingProblem || "Needs clarification from PM",
+      targetUser: String(x.targetUser ?? "").trim(),
+      possibleSolutions: stringArray(x.possibleSolutions),
+      mappedOpportunity,
+      scores,
       rationale: String(x.rationale ?? "").trim(),
       tradeoffs: stringArray(x.tradeoffs),
       assumptions: stringArray(x.assumptions),
       risks: stringArray(x.risks),
+      missingInformation: stringArray(x.missingInformation),
     });
   }
-  return out.slice(0, 20);
+  return out
+    .slice(0, 24)
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+    .map((item, idx) => ({ ...item, rank: idx + 1 }));
 }
 
 function userStoryArray(v: unknown): UserStoryDraft[] {

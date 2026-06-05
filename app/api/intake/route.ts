@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { runIntakeAgent } from "@/lib/agents/intakeAgent";
+import { agentErrorResponse } from "@/lib/api/agentRouteResponse";
 import { parseIntakeAgentInput } from "@/lib/parseAgentHttpBody";
 
 export async function POST(request: Request) {
@@ -20,8 +21,6 @@ export async function POST(request: Request) {
     const result = await runIntakeAgent(payload);
     return NextResponse.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Intake Agent failed unexpectedly";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return agentErrorResponse(error, "Intake Agent");
   }
 }

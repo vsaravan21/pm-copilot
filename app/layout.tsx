@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+
+import { ClientProviders } from "@/components/providers/ClientProviders";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -17,7 +19,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "PM Copilot",
   description:
-    "Turn messy product inputs into structured decisions so insight, prioritization, and product specs become easier to create.",
+    "Turn notes, research, and rough ideas into insights, prioritization, and PRDs.",
 };
 
 export default function RootLayout({
@@ -27,7 +29,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${plusJakarta.variable} ${jetbrainsMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ClientProviders>{children}</ClientProviders>
+      </body>
     </html>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { runPrioritizationAgent } from "@/lib/agents/prioritizationAgent";
+import { agentErrorResponse } from "@/lib/api/agentRouteResponse";
 import { parsePrioritizationAgentInput } from "@/lib/parseAgentHttpBody";
 
 export async function POST(request: Request) {
@@ -20,10 +21,6 @@ export async function POST(request: Request) {
     const result = await runPrioritizationAgent(payload);
     return NextResponse.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Prioritization Agent failed unexpectedly";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return agentErrorResponse(error, "Prioritization Agent");
   }
 }

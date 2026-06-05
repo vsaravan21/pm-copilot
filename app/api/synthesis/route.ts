@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { runSynthesisAgent } from "@/lib/agents/synthesisAgent";
+import { agentErrorResponse } from "@/lib/api/agentRouteResponse";
 import { parseSynthesisAgentInput } from "@/lib/parseAgentHttpBody";
 
 export async function POST(request: Request) {
@@ -20,8 +21,6 @@ export async function POST(request: Request) {
     const result = await runSynthesisAgent(payload);
     return NextResponse.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Synthesis Agent failed unexpectedly";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return agentErrorResponse(error, "Synthesis Agent");
   }
 }

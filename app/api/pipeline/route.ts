@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { agentErrorResponse } from "@/lib/api/agentRouteResponse";
 import { runFullPipeline } from "@/lib/pipeline/runFullPipeline";
 
 export async function POST(request: Request) {
@@ -39,8 +40,6 @@ export async function POST(request: Request) {
     const result = await runFullPipeline({ notes, productName, targetUser });
     return NextResponse.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Pipeline failed unexpectedly";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return agentErrorResponse(error, "Pipeline");
   }
 }
